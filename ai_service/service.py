@@ -1,6 +1,7 @@
 import operator
 import os
-from typing import TypedDict, Annotated
+from typing import TypedDict, Annotated, List
+from enum import Enum
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -9,6 +10,9 @@ from langgraph.graph import StateGraph
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
+
+# 导入AI发帖助手模块
+from agent_write import execute_agent_write
 
 load_dotenv()
 
@@ -30,8 +34,8 @@ model = ChatOpenAI(
     openai_api_base="https://token-plan-cn.xiaomimimo.com/v1",
     temperature=0
 )
-# response = model.invoke("你好，请简单介绍一下自己")
-# print(response.content)
+
+# ==================== 摘要功能 ====================
 
 # 状态定义
 class AgentState(TypedDict):
@@ -172,6 +176,41 @@ async def generate_summary_api(request: SummaryRequest):
 @app.get("/api/ai/health")
 async def health():
     return {"status": "ok"}
+
+
+# ==================== AI发帖助手 ====================
+
+# 请求模型
+class WriteRequest(BaseModel):
+    topic: str
+
+
+# 响应模型
+class WriteResponse(BaseModel):
+    title: str
+    summary: str
+    content: str
+    tags: List[str]
+
+
+@app.post("/api/ai/agent/write", response_model=WriteResponse)
+async def agent_write(request: WriteRequest):
+    """AI发帖助手接口"""
+    if not request.topic or request.topic.strip() == "":
+        return {"error": "请输入文章主题"}
+
+    # 调用AI发帖助手模块
+    result = execute_agent_write(request.topic)
+
+    if "error" in result:
+        return result
+
+    return WriteResponse(
+        title=result.get("title", ""),
+        summary=result.get("summary", ""),
+        content=result.get("content", ""),
+        tags=result.get("tags", [])
+    )
 
 
 if __name__ == "__main__":
